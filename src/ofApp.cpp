@@ -2,6 +2,11 @@
 
 //--------------------------------------------------------------
 void ofApp::setup(){
+
+
+	//serial.setup(settingsXML.getValue("microPort", "COM8"), settingsXML.getValue("microPort", 115200));
+	serial.setup("COM3", 115200);
+
 	gui.setup();
 
 	gui.add(windSpeed.setup("wind", 0, 0, 255));
@@ -33,54 +38,22 @@ void ofApp::setup(){
 
 	}
 
+	//SUN CALCULATION
 	Poco::LocalDateTime now;
-
 	date_str = Poco::DateTimeFormatter::format(now, "%Y-%m-%d %H:%M:%S");
-	//ofLogNotice("NOW") << date_str;
-	//ofLogNotice("local tzd") << now.tzd();
-
 	lat = 51.547492; // Note southern degrees need to be - (not like those from google maps)
 	lon = -0.0107809; //
-
-
 	latlon_str = "lat:" + ofToString(lat) + ", lon:" + ofToString(lon);
-
-	//ofLogNotice("today") << sun_calc.dateToString(now);
-
 	SunCalcPosition sunpos = sun_calc.getSunPosition(now, lat, lon);
-
 	pos_str = "altitude=" + ofToString(sunpos.altitude) + ", azimuth=" + ofToString(sunpos.azimuth * RAD_TO_DEG);
-
-	//ofLogNotice("sunpos") << pos_str;
-
 	todayInfo = sun_calc.getDayInfo(now, lat, lon, true);
-
 	min_info_str = sun_calc.infoToString(todayInfo, true);
 	max_info_str = sun_calc.infoToString(todayInfo, false);
 	ofLogNotice() << min_info_str << endl << endl << max_info_str;
-
-	//small_font.loadFont(OF_TTF_MONO, 8, false);
-
-	//Poco::LocalDateTime sixMonthsAgo = now - Poco::Timespan(30 * 6, 0, 0, 0, 0);
-	//Poco::LocalDateTime threeMonthsAgo = now - Poco::Timespan(30 * 3, 0, 0, 0, 0);
-	//Poco::LocalDateTime threeMonthsInFuture = now + Poco::Timespan(30 * 3, 0, 0, 0, 0);
-
-	//labels.push_back("6 months ago\n" + ofxSunCalc::dateToDateString(sixMonthsAgo));
-	//labels.push_back("3 months ago\n" + ofxSunCalc::dateToDateString(threeMonthsAgo));
 	labels.push_back("Today\n" + ofxSunCalc::dateToDateString(now));
-	//labels.push_back("3 months time\n" + ofxSunCalc::dateToDateString(threeMonthsInFuture));
-
-
 	vector<SunCalcDayInfo> sun_infos;
-
-	//sun_infos.push_back(sun_calc.getDayInfo(sixMonthsAgo, lat, lon, false));
-	//sun_infos.push_back(sun_calc.getDayInfo(threeMonthsAgo, lat, lon, false));
 	sun_infos.push_back(todayInfo);
-	//sun_infos.push_back(sun_calc.getDayInfo(threeMonthsInFuture, lat, lon, false));
-
-	// create/draw a timeline for each date
 	for (int i = 0; i<1; i++) {
-
 		timelines.push_back(ofFbo());
 		timelines[i].allocate(ofGetWidth() - 20 - 110, 32,GL_RGBA);
 		ofxSunCalc::drawSimpleDayInfoTimeline(timelines[i], sun_infos[i]);
@@ -90,6 +63,7 @@ void ofApp::setup(){
 
 //--------------------------------------------------------------
 void ofApp::update(){
+
 	shader.begin();
 	shader.setUniform2f("resolution", 1000, 1000);
 	float windSpeedMapped = ofMap((float)windSpeed, 0, 255, 0, 1);
@@ -97,21 +71,56 @@ void ofApp::update(){
 	shader.setUniform1f("wind", (float)windSpeedMapped);
 	shader.end();
 
+	if (ofGetFrameNum() % 4 == 0) {
+		if (serial.isInitialized()) {
+			//cout << "6" << endl;
 
+			vector<long>tMotorVal;
+
+			//TODO Replace 2 with MOTOR_NUM
+			for (int i = 0;i < 2;i++) {
+				tMotorVal.push_back((long)motorSpeed[i]);
+			}
+
+			string serialRead = getSerialString(serial, '\n');
+
+			cout << "serial read" << serialRead<< endl;
+
+			if (serialRead == "end") {
+			//	serial.flush();
+			//	sendArduino(serial, tMotorVal);
+			}
+			else if (serialRead == ""|| serialRead == "\n" || serialRead == " " ) {
+			//	sendArduino(serial, tMotorVal);
+			}
+			else {
+			//	cout << "wind speed" << endl;
+		if(ofToInt(serialRead)!=0)
+				windSpeed = ofMap(ofToInt(serialRead), 78, 130, 0, 255, true);
+		serial.flush();
+		sendArduino(serial, tMotorVal);
+
+			}
+			//	cout << "send" << endl;
+		}
+		else {
+			//	serialMega.flush();
+		}
+		//cout << "7" << endl;
+	}
 
 }
 
 //--------------------------------------------------------------
 void ofApp::draw(){
+
 	ofClear(255);
 	ofEnableAlphaBlending();
 	ofBackgroundGradient( ofColor(sunBrightness, sunBrightness, sunBrightness),ofColor(0, 0, 0));
 	ofSetColor(255, 255, 255);
 
-
 	drawWeatherDebug();
-	//ofBackgroundGradient(ofColor(0, 0, 0,200), ofColor(100, 100, 100,200));
-	
+
 	fbo.begin();
 	shader.begin();
 	ofDrawRectangle(0, 0, 1000, 1000);
@@ -121,11 +130,8 @@ void ofApp::draw(){
 	fbo.readToPixels(pixels);
 	tempImage.setFromPixels(pixels, 1000, 1000, OF_IMAGE_COLOR_ALPHA);
 
-
 	for (int i = 0; i < MOTOR_NUMBERS; i++) {
-	
 		motorCurrentAngle[i] += ofMap(motorSpeed[i], 0.0, 255.0, 0.0, 10.0, true);
-	
 	}
 
 
@@ -335,3 +341,77 @@ void ofApp::gotMessage(ofMessage msg){
 void ofApp::dragEvent(ofDragInfo dragInfo){ 
 
 }
+
+
+
+void ofApp::sendArduino(ofSerial &serial, vector<long>val) {
+
+
+	string endOfLineCharacter = "n";
+	//string send = "";
+
+	string stringVal = "";
+	for (int i = 0;i < val.size();i++) {
+		stringVal += ofToString(val[i]) + ",";;
+	}
+
+
+	stringVal = stringVal.substr(0, stringVal.size() - 1);//delete the last char
+
+	stringVal += endOfLineCharacter;
+
+	cout << "sent to arduino buffer: " << stringVal << endl;
+	char buffer[1024];
+	strncpy(buffer, stringVal.c_str(), sizeof(buffer));
+	buffer[sizeof(buffer) - 1] = 0;
+
+	serial.writeBytes((unsigned char*)&buffer[0], stringVal.size());
+
+}
+
+
+
+
+string ofApp::getSerialString(ofSerial &serial, char until) {
+
+	if (serial.isInitialized() && serial.available()) {
+		static string str;
+		stringstream ss;
+		char ch;
+		int ttl = 1000;
+
+		while ((ch = serial.readByte())>0 && ttl-->0 && ch != until) {
+			ss << ch;
+		}
+
+		str += ss.str();
+		if (ch == until) {
+			string tmp = str;
+			str = "";
+			return ofxTrimString(tmp);
+		}
+		else {
+			return "";
+		}
+	}
+	else {
+		return "";
+	}
+}
+
+// trim trailing spaces
+string ofApp::ofxTrimStringRight(string str) {
+	size_t endpos = str.find_last_not_of(" \t\r\n");
+	return (string::npos != endpos) ? str.substr(0, endpos + 1) : str;
+}
+
+// trim trailing spaces
+string ofApp::ofxTrimStringLeft(string str) {
+	size_t startpos = str.find_first_not_of(" \t\r\n");
+	return (string::npos != startpos) ? str.substr(startpos) : str;
+}
+
+string ofApp::ofxTrimString(string str) {
+	return ofxTrimStringLeft(ofxTrimStringRight(str));;
+}
+

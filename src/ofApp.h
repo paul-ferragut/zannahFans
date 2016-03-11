@@ -64,5 +64,18 @@ class ofApp : public ofBaseApp{
 		float lat;
 		float lon;
 
+
+		//ARDUINO STUFF
+		void sendArduino(ofSerial &serial, vector<long>val);
+		string getSerialString(ofSerial &serial, char until);
+		// trim trailing spaces
+		string ofxTrimStringRight(string str);
+		// trim trailing spaces
+		string ofxTrimStringLeft(string str);
+		string ofxTrimString(string str);
+
+		//
+		ofSerial serial;
+
 		
 };
