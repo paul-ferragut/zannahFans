@@ -12,8 +12,9 @@ zannahFans.vcxproj
 *.sln
 *.tlog
 obj/Release/tinyxmlerror.obj
-*.obj
 bin/zannahFans_debug.exe
+obj/Release/*
+obj/Debug/*
 *.ilk
 *.cache
 obj/Release/zannahFans.log
